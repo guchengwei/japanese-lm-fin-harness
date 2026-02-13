@@ -149,7 +149,6 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
         wandb_config_args_dict = simple_parse_args_string(args.wandb_config_args)
         wandb_logger = WandbLogger(wandb_args_dict, wandb_config_args_dict)
 
-    utils.setup_logging(args.verbosity)
     eval_logger = logging.getLogger(__name__)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
