@@ -59,7 +59,8 @@ def process_results(self: ConfigurableTask, doc: dict, results: dict) -> dict:
 
             if gold_index_error:
                 eval_logger.warning(
-                    f"Label index was not in within range of available choices," f"Sample:\n\n{doc}\n\n"
+                    f"Label index was not in within range of available choices,"
+                    f"Sample:\n\n{doc}\n\n"
                 )
 
             if self.multiple_target:
@@ -105,15 +106,27 @@ def process_results(self: ConfigurableTask, doc: dict, results: dict) -> dict:
 
             result_dict.update(
                 {
-                    **({"f1_norm": (gold, pred_norm)} if "f1_norm" in use_metric else {}),
+                    **(
+                        {"f1_norm": (gold, pred_norm)}
+                        if "f1_norm" in use_metric
+                        else {}
+                    ),
                     **({"map": map_score} if "map" in use_metric else {}),
                     **({"map_2": map_2} if "map_2" in use_metric else {}),
                     **({"map_3": map_3} if "map_3" in use_metric else {}),
                     **({"map_4": map_4} if "map_4" in use_metric else {}),
-                    **({"map_norm": map_score_norm} if "map_norm" in use_metric else {}),
-                    **({"map_2_norm": map_2_norm} if "map_2_norm" in use_metric else {}),
-                    **({"map_3_norm": map_3_norm} if "map_3_norm" in use_metric else {}),
-                    **({"map_4_norm": map_4_norm} if "map_4_norm" in use_metric else {}),
+                    **(
+                        {"map_norm": map_score_norm} if "map_norm" in use_metric else {}
+                    ),
+                    **(
+                        {"map_2_norm": map_2_norm} if "map_2_norm" in use_metric else {}
+                    ),
+                    **(
+                        {"map_3_norm": map_3_norm} if "map_3_norm" in use_metric else {}
+                    ),
+                    **(
+                        {"map_4_norm": map_4_norm} if "map_4_norm" in use_metric else {}
+                    ),
                 }
             )
         else:
@@ -151,7 +164,9 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
     if args.predict_only:
         args.log_samples = True
     if (args.log_samples or args.predict_only) and not args.output_path:
-        raise ValueError("Specify --output_path if providing --log_samples or --predict_only")
+        raise ValueError(
+            "Specify --output_path if providing --log_samples or --predict_only"
+        )
 
     if args.fewshot_as_multiturn and args.apply_chat_template is False:
         raise ValueError(
@@ -163,8 +178,14 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
     metadata = (
         simple_parse_args_string(args.model_args)
         if isinstance(args.model_args, str)
-        else args.model_args if isinstance(args.model_args, dict) else {}
-    ) | (args.metadata if isinstance(args.metadata, dict) else simple_parse_args_string(args.metadata))
+        else args.model_args
+        if isinstance(args.model_args, dict)
+        else {}
+    ) | (
+        args.metadata
+        if isinstance(args.metadata, dict)
+        else simple_parse_args_string(args.metadata)
+    )
 
     task_manager = TaskManager(include_path=args.include_path, metadata=metadata)
 
@@ -175,10 +196,13 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
 
     if args.limit:
         eval_logger.warning(
-            " --limit SHOULD ONLY BE USED FOR TESTING." "REAL METRICS SHOULD NOT BE COMPUTED USING LIMIT."
+            " --limit SHOULD ONLY BE USED FOR TESTING."
+            "REAL METRICS SHOULD NOT BE COMPUTED USING LIMIT."
         )
     if args.samples:
-        assert args.limit is None, "If --samples is not None, then --limit must be None."
+        assert (
+            args.limit is None
+        ), "If --samples is not None, then --limit must be None."
         if (samples := Path(args.samples)).is_file():
             args.samples = json.loads(samples.read_text())
         else:
@@ -248,7 +272,9 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
         else print(f"Selected Tasks: {task_names}")
     )
 
-    request_caching_args = request_caching_arg_to_dict(cache_requests=args.cache_requests)
+    request_caching_args = request_caching_arg_to_dict(
+        cache_requests=args.cache_requests
+    )
 
     results = evaluator.simple_evaluate(
         model=args.model,
@@ -288,7 +314,9 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
     if results is not None:
         if args.log_samples:
             samples = results.pop("samples")
-        dumped = json.dumps(results, indent=2, default=handle_non_serializable, ensure_ascii=False)
+        dumped = json.dumps(
+            results, indent=2, default=handle_non_serializable, ensure_ascii=False
+        )
         if args.show_config:
             print(dumped)
 
@@ -304,13 +332,20 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
             except Exception as e:
                 eval_logger.info(f"Logging to Weights and Biases failed due to {e}")
 
-        evaluation_tracker.save_results_aggregated(results=results, samples=samples if args.log_samples else None)
+        evaluation_tracker.save_results_aggregated(
+            results=results, samples=samples if args.log_samples else None
+        )
 
         if args.log_samples:
             for task_name, config in results["configs"].items():
-                evaluation_tracker.save_results_samples(task_name=task_name, samples=samples[task_name])
+                evaluation_tracker.save_results_samples(
+                    task_name=task_name, samples=samples[task_name]
+                )
 
-        if evaluation_tracker.push_results_to_hub or evaluation_tracker.push_samples_to_hub:
+        if (
+            evaluation_tracker.push_results_to_hub
+            or evaluation_tracker.push_samples_to_hub
+        ):
             evaluation_tracker.recreate_metadata_card()
 
         print(
