@@ -9,8 +9,7 @@ from typing import Union
 import numpy as np
 from lm_eval import evaluator
 from lm_eval import utils
-from lm_eval.__main__ import parse_eval_args
-from lm_eval.__main__ import setup_parser
+from lm_eval._cli import HarnessCLI
 from lm_eval.api.task import ConfigurableTask
 from lm_eval.evaluator import request_caching_arg_to_dict
 from lm_eval.loggers import EvaluationTracker
@@ -142,15 +141,14 @@ ConfigurableTask.process_results = process_results
 def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
     if not args:
         # we allow for args to be passed externally, else we parse them ourselves
-        parser = setup_parser()
-        args = parse_eval_args(parser)
+        parser = HarnessCLI()
+        args = parser.parse_args()
 
     if args.wandb_args:
         wandb_args_dict = simple_parse_args_string(args.wandb_args)
         wandb_config_args_dict = simple_parse_args_string(args.wandb_config_args)
         wandb_logger = WandbLogger(wandb_args_dict, wandb_config_args_dict)
 
-    utils.setup_logging(args.verbosity)
     eval_logger = logging.getLogger(__name__)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
