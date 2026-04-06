@@ -54,48 +54,119 @@ class CpaAudit(datasets.GeneratorBasedBuilder):
                 },
             )
         ]
-
     def _generate_examples(self, filepath, split):
         df = pd.read_excel(filepath, index_col=0)
-        df["question"] = df["question"].astype(str)
-        df["ア"] = df["ア"].astype(str)
-        df["イ"] = df["イ"].astype(str)
-        df["ウ"] = df["ウ"].astype(str)
-        df["エ"] = df["エ"].astype(str)
-        df["オ"] = df["オ"].astype(str)
-        df["カ"] = df["カ"].astype(str)
+    
+        # useful one-time check
+        dup_cols = df.columns[df.columns.duplicated()].tolist()
+        if dup_cols:
+            print("WARNING duplicate columns:", dup_cols)
+    
+        def norm_text(v):
+            if pd.isna(v):
+                return ""
+            return str(v)
+    
+        def norm_int(v):
+            if pd.isna(v):
+                return None
+            try:
+                return int(float(v))
+            except Exception:
+                return None
+    
+        text_cols = ["question", "ア", "イ", "ウ", "エ", "オ", "カ"]
+        for col in text_cols:
+            if col in df.columns:
+                df[col] = df[col].map(norm_text)
+    
+        for col in [1, 2, 3, 4, 5, 6]:
+            if col in df.columns:
+                df[col] = df[col].map(norm_text)
+    
+        if "a_no" in df.columns:
+            df["a_no"] = df["a_no"].map(norm_int)
+        if "abnormal_flg" in df.columns:
+            df["abnormal_flg"] = df["abnormal_flg"].map(norm_int)
+    
         i_count = 0
         for row in df.to_dict(orient="records"):
-            if row["question"] == "" or row["question"] == "nan":
+            question = norm_text(row.get("question"))
+            if question in ("", "nan"):
                 continue
-            if row["abnormal_flg"] == 1:
+    
+            if row.get("abnormal_flg") == 1:
                 continue
-            id = i_count
-            i_count += 1
-            question = row["question"]
+    
+            answer_raw = row.get("a_no")
+            if answer_raw is None:
+                continue
+    
             contexts = []
-            if "ア" in row and row["ア"] != "" and row["ア"] != "nan":
-                contexts.append("ア: " + row["ア"])
-            if "イ" in row and row["イ"] != "" and row["イ"] != "nan":
-                contexts.append("イ: " + row["イ"])
-            if "ウ" in row and row["ウ"] != "" and row["ウ"] != "nan":
-                contexts.append("ウ: " + row["ウ"])
-            if "エ" in row and row["エ"] != "" and row["エ"] != "nan":
-                contexts.append("エ: " + row["エ"])
-            if "オ" in row and row["オ"] != "" and row["オ"] != "nan":
-                contexts.append("オ: " + row["オ"])
-            if "カ" in row and row["カ"] != "" and row["カ"] != "nan":
-                contexts.append("カ: " + row["カ"])
-            context = "\n".join(contexts)
-            choices = [{"id": i, "text": row[i + 1]} for i in range(6)]
-            answer = row["a_no"] - 1
-            yield id, {
-                "id": id,
+            for key in ["ア", "イ", "ウ", "エ", "オ", "カ"]:
+                val = norm_text(row.get(key, ""))
+                if val not in ("", "nan"):
+                    contexts.append(f"{key}: {val}")
+
+            choices = [{"id": i, "text": norm_text(row.get(i + 1, "")).strip()} for i in range(6)]
+
+            # skip rows with missing/empty options
+            if any(c["text"] == "" for c in choices):
+                continue
+            
+            answer = answer_raw - 1
+            if not (0 <= answer < len(choices)):
+                continue
+    
+            yield i_count, {
+                "id": i_count,
                 "question": question,
-                "context": context,
+                "context": "\n".join(contexts),
                 "choices": choices,
                 "answer": answer,
             }
+            i_count += 1
+    # def _generate_examples(self, filepath, split):
+    #     df = pd.read_excel(filepath, index_col=0)
+    #     df["question"] = df["question"].astype(str)
+    #     df["ア"] = df["ア"].astype(str)
+    #     df["イ"] = df["イ"].astype(str)
+    #     df["ウ"] = df["ウ"].astype(str)
+    #     df["エ"] = df["エ"].astype(str)
+    #     df["オ"] = df["オ"].astype(str)
+    #     df["カ"] = df["カ"].astype(str)
+    #     i_count = 0
+    #     for row in df.to_dict(orient="records"):
+    #         if row["question"] == "" or row["question"] == "nan":
+    #             continue
+    #         if row["abnormal_flg"] == 1:
+    #             continue
+    #         id = i_count
+    #         i_count += 1
+    #         question = row["question"]
+    #         contexts = []
+    #         if "ア" in row and row["ア"] != "" and row["ア"] != "nan":
+    #             contexts.append("ア: " + row["ア"])
+    #         if "イ" in row and row["イ"] != "" and row["イ"] != "nan":
+    #             contexts.append("イ: " + row["イ"])
+    #         if "ウ" in row and row["ウ"] != "" and row["ウ"] != "nan":
+    #             contexts.append("ウ: " + row["ウ"])
+    #         if "エ" in row and row["エ"] != "" and row["エ"] != "nan":
+    #             contexts.append("エ: " + row["エ"])
+    #         if "オ" in row and row["オ"] != "" and row["オ"] != "nan":
+    #             contexts.append("オ: " + row["オ"])
+    #         if "カ" in row and row["カ"] != "" and row["カ"] != "nan":
+    #             contexts.append("カ: " + row["カ"])
+    #         context = "\n".join(contexts)
+    #         choices = [{"id": i, "text": row[i + 1]} for i in range(6)]
+    #         answer = row["a_no"] - 1
+    #         yield id, {
+    #             "id": id,
+    #             "question": question,
+    #             "context": context,
+    #             "choices": choices,
+    #             "answer": answer,
+    #         }
 
 
 if __name__ == "__main__":

@@ -1,6 +1,8 @@
 task: fp2
 dataset_path: jlm_fin_eval/datasets/fp2/fp2.py
 dataset_name: fp2
+dataset_kwargs:
+  trust_remote_code: true
 output_type: multiple_choice
 training_split: null
 validation_split: null

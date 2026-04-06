@@ -1,6 +1,8 @@
 task: security_sales_1
 dataset_path: jlm_fin_eval/datasets/security_sales_1/security_sales_1.py
 dataset_name: security_sales_1
+dataset_kwargs:
+  trust_remote_code: true
 output_type: multiple_choice
 training_split: null
 validation_split: null

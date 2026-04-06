@@ -52,25 +52,73 @@ class Chabsa(datasets.GeneratorBasedBuilder):
             )
         ]
 
+    # def _generate_examples(self, filepath, split):
+    #     files = glob.glob(os.path.join(filepath, "chABSA-dataset", "*.json"))
+    #     i_count = 0
+    #     for data_file in files:
+    #         with open(data_file, encoding="utf-8") as f:
+    #             data = json.load(f)
+    #             for row in data["sentences"]:
+    #                 sentence = row["sentence"]
+    #                 for opinion_row in row["opinions"]:
+    #                     id = i_count
+    #                     i_count += 1
+    #                     target = opinion_row["target"]
+    #                     polarity = opinion_row["polarity"]
+    #                     yield id, {
+    #                         "id": id,
+    #                         "sentence": sentence,
+    #                         "target": target,
+    #                         "polarity": polarity,
+    #                     }
+
     def _generate_examples(self, filepath, split):
-        files = glob.glob(os.path.join(filepath, "chABSA-dataset", "*.json"))
+        files = sorted(glob.glob(os.path.join(filepath, "chABSA-dataset", "*.json")))
+    
         i_count = 0
+        stats = {
+            "kept": 0,
+            "skip_neutral": 0,
+            "skip_bad_label": 0,
+            "skip_empty_target": 0,
+            "skip_empty_sentence": 0,
+        }
+    
         for data_file in files:
             with open(data_file, encoding="utf-8") as f:
                 data = json.load(f)
                 for row in data["sentences"]:
-                    sentence = row["sentence"]
+                    sentence = str(row.get("sentence", "")).strip()
+                    if not sentence:
+                        stats["skip_empty_sentence"] += 1
+                        continue
+    
                     for opinion_row in row["opinions"]:
-                        id = i_count
-                        i_count += 1
-                        target = opinion_row["target"]
-                        polarity = opinion_row["polarity"]
-                        yield id, {
-                            "id": id,
+                        target = str(opinion_row.get("target", "")).strip()
+                        if not target:
+                            stats["skip_empty_target"] += 1
+                            continue
+    
+                        polarity = str(opinion_row.get("polarity", "")).strip().lower()
+    
+                        if polarity == "neutral":
+                            stats["skip_neutral"] += 1
+                            continue
+    
+                        if polarity not in {"positive", "negative"}:
+                            stats["skip_bad_label"] += 1
+                            continue
+    
+                        yield i_count, {
+                            "id": i_count,
                             "sentence": sentence,
                             "target": target,
                             "polarity": polarity,
                         }
+                        i_count += 1
+                        stats["kept"] += 1
+    
+        print("CHABSA_STATS", stats)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,66 @@ from main import cli_evaluate
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 
+def _safe_get(items: Any, index: int) -> Any:
+    if items is None:
+        return None
+    try:
+        return items[index]
+    except (IndexError, KeyError, TypeError):
+        return None
+
+
+def _coerce_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+                continue
+            text = getattr(item, "text", None)
+            if isinstance(text, str):
+                parts.append(text)
+        return "".join(parts)
+    return str(value)
+
+
+def _openai_chat_text(response: Any) -> str:
+    choice = _safe_get(getattr(response, "choices", None), 0)
+    if choice is None:
+        return ""
+    message = getattr(choice, "message", None)
+    return _coerce_text(getattr(message, "content", None))
+
+
+def _openai_completion_text(response: Any) -> str:
+    choice = _safe_get(getattr(response, "choices", None), 0)
+    if choice is None:
+        return ""
+    return _coerce_text(getattr(choice, "text", None))
+
+
+def _vertexai_text(response: Any) -> str:
+    candidate = _safe_get(getattr(response, "candidates", None), 0)
+    if candidate is None:
+        return ""
+    content = getattr(candidate, "content", None)
+    part = _safe_get(getattr(content, "parts", None), 0)
+    if part is None:
+        return ""
+    return _coerce_text(getattr(part, "text", None))
+
+
+def _anthropic_text(response: Any) -> str:
+    content = _safe_get(getattr(response, "content", None), 0)
+    if content is None:
+        return ""
+    return _coerce_text(getattr(content, "text", None))
+
+
 def oa_chat_completion(
     client: openai.Client, chat: bool = False, **kwargs: Any
 ) -> Optional[Dict]:
@@ -108,11 +168,13 @@ class AzureOpenaiCompletionsLM(LocalCompletionsAPI):
             seed=seed,
             max_length=max_length,
         )
-        self.client = openai.AzureOpenAI(
-            azure_endpoint=base_url,
-            api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
-            api_version=os.environ.get("AZURE_OPENAI_API_VERSION"),
-        )
+        self.client = None
+        if base_url and "openai.azure.com" in base_url:
+            self.client = openai.AzureOpenAI(
+                azure_endpoint=base_url,
+                api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
+                api_version=os.environ.get("AZURE_OPENAI_API_VERSION"),
+            )
 
     def _loglikelihood_tokens(
         self,
@@ -137,11 +199,7 @@ class AzureOpenaiCompletionsLM(LocalCompletionsAPI):
                 max_tokens=self._max_gen_toks,
             )
 
-            # Azure content filter
-            if response is not None and response.choices[0].message.content:
-                resp_txt = response.choices[0].message.content
-            else:
-                resp_txt = ""
+            resp_txt = _openai_chat_text(response)
             choices = list(
                 map(
                     lambda x: x[1:] if x[0] == " " else x,
@@ -183,6 +241,12 @@ class OpenaiCompletionsLM(AzureOpenaiCompletionsLM):
     ) -> None:
         if base_url is None:
             base_url = os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
+        if (
+            "openrouter.ai" in base_url
+            and tokenizer is None
+            and tokenizer_backend == "tiktoken"
+        ):
+            tokenizer_backend = None
         super().__init__(
             model=model,
             base_url=base_url,
@@ -271,10 +335,7 @@ class GcpVertexAiCompletionsLM(LocalCompletionsAPI):
                 contents=vertexai.preview.generative_models.Part.from_text(key),
             )
 
-            if response is not None and response.candidates[0].content.parts[0].text:
-                resp_txt = response.candidates[0].content.parts[0].text
-            else:
-                resp_txt = ""
+            resp_txt = _vertexai_text(response)
             choices = list(
                 map(
                     lambda x: x[1:] if x[0] == " " else x,
@@ -327,10 +388,7 @@ class CustomizedAnthropicLM(AnthropicLM):
                 max_tokens=self._max_gen_toks,
             )
 
-            if response is not None and response.content[0].text:
-                resp_txt = response.content[0].text
-            else:
-                resp_txt = ""
+            resp_txt = _anthropic_text(response)
             choices = list(
                 map(
                     lambda x: x[1:] if x[0] == " " else x,
@@ -420,11 +478,7 @@ class SelfHostedCompletionsLM1(LocalCompletionsAPI):
                 max_tokens=self._max_gen_toks,
             )
 
-            # Azure content filter
-            if response is not None and response.choices[0].text:
-                resp_txt = response.choices[0].text
-            else:
-                resp_txt = ""
+            resp_txt = _openai_completion_text(response)
             choices = list(
                 map(
                     lambda x: x[1:] if x[0] == " " else x,
@@ -511,11 +565,7 @@ class SelfHostedChatCompletionsLM1(LocalCompletionsAPI):
                 max_tokens=self._max_gen_toks,
             )
 
-            # Azure content filter
-            if response is not None and response.choices[0].message.content:
-                resp_txt = response.choices[0].message.content
-            else:
-                resp_txt = ""
+            resp_txt = _openai_chat_text(response)
             choices = list(
                 map(
                     lambda x: x[1:] if x[0] == " " else x,
