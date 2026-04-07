@@ -1,8 +1,10 @@
 import os
 import re
+import threading
 import time
 import unicodedata
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 from typing import Dict
 from typing import List
@@ -183,13 +185,16 @@ class AzureOpenaiCompletionsLM(LocalCompletionsAPI):
         override_bs: int = None,
     ) -> List[Tuple[float, bool]]:
         res = defaultdict(list)
+        lock = threading.Lock()
 
         grouper = lm_eval.models.utils.Grouper(requests, lambda x: str(x[0][0]))
+        grouped = grouper.get_grouped()
 
+        n_workers = max(1, override_bs if override_bs is not None else self._batch_size)
         pbar = tqdm(total=len(requests), disable=(disable_tqdm or (self.rank != 0)))
-        for key, re_ord in grouper.get_grouped().items():
-            inps = [{"role": "user", "content": key}]
 
+        def _process_one(key, re_ord):
+            inps = [{"role": "user", "content": key}]
             response = oa_chat_completion(
                 client=self.client,
                 chat=True,
@@ -198,7 +203,6 @@ class AzureOpenaiCompletionsLM(LocalCompletionsAPI):
                 temperature=0.0,
                 max_tokens=self._max_gen_toks,
             )
-
             resp_txt = _openai_chat_text(response)
             choices = list(
                 map(
@@ -212,12 +216,20 @@ class AzureOpenaiCompletionsLM(LocalCompletionsAPI):
                 -1.0 * (m.start() if m is not None else float("inf"))
                 for m in choice_found
             ]
+            return key, re_ord, [(ll, ll == max(result)) for ll in result]
 
-            for ll, ord in zip(result, re_ord):
-                answer = (ll, ll == max(result))
-                res[key].append(answer)
-                self.cache_hook.add_partial("loglikelihood", ord[0], answer)
-                pbar.update(1)
+        with ThreadPoolExecutor(max_workers=n_workers) as executor:
+            futures = {
+                executor.submit(_process_one, key, re_ord): key
+                for key, re_ord in grouped.items()
+            }
+            for future in as_completed(futures):
+                key, re_ord, answers = future.result()
+                with lock:
+                    for answer, ord in zip(answers, re_ord):
+                        res[key].append(answer)
+                        self.cache_hook.add_partial("loglikelihood", ord[0], answer)
+                        pbar.update(1)
 
         pbar.close()
 
